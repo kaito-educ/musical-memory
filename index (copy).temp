@@ -5,7 +5,6 @@ const path = require("path");
 const os = require("os");
 const ffmpeg = require("fluent-ffmpeg");
 const ffmpegPath = require("ffmpeg-static");
-const express = require("express");
 
 // ─────────────────────────────────────────────
 // CONFIG
@@ -26,28 +25,6 @@ if (!config.tikwmApi) {
 const bot = new Telegraf(config.botToken);
 
 ffmpeg.setFfmpegPath(ffmpegPath);
-
-// ─────────────────────────────────────────────
-// EXPRESS SERVER — RENDER
-// ─────────────────────────────────────────────
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get("/", (req, res) => {
-    res.status(200).send("🤖 TikTok Downloader Bot is online!");
-});
-
-app.get("/health", (req, res) => {
-    res.status(200).json({
-        status: "online",
-        bot: "TikTok Downloader Bot"
-    });
-});
-
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`🌐 Web server running on port ${PORT}`);
-});
 
 // ─────────────────────────────────────────────
 // SETTINGS
@@ -151,10 +128,12 @@ function getThumbnail(data) {
 
 function getVideoUrl(data, hd = false) {
 
+    // HD from TikWM
     if (hd) {
         return data.hdplay || null;
     }
 
+    // Normal no-watermark video
     return data.play || null;
 }
 
@@ -188,7 +167,9 @@ async function downloadFile(
         url,
         {
             responseType: "stream",
+
             timeout: 120000,
+
             maxRedirects: 5
         }
     );
@@ -227,12 +208,13 @@ async function downloadFile(
                             Math.floor(
                                 (downloaded /
                                     total) *
-                                100
+                                    100
                             );
 
                         onProgress(percent);
                     }
 
+                    // Safety check while downloading
                     if (
                         downloaded >
                         MAX_FILE_SIZE
@@ -286,7 +268,9 @@ function convertToMp3(
                 .audioCodec(
                     "libmp3lame"
                 )
+
                 .audioBitrate("128k")
+
                 .format("mp3")
 
                 .on(
@@ -360,9 +344,10 @@ setInterval(
                         fullPath
                     );
 
+                // Delete files older than 30 minutes
                 if (
                     Date.now() -
-                    stat.mtimeMs >
+                        stat.mtimeMs >
                     30 * 60 * 1000
                 ) {
 
@@ -397,7 +382,7 @@ function progressBar(
     const filled =
         Math.round(
             (percent / 100) *
-            total
+                total
         );
 
     return (
@@ -703,6 +688,7 @@ async function processTikTok(
                 ]
             ]);
 
+        // Send thumbnail
         if (thumbnail) {
 
             try {
@@ -875,6 +861,10 @@ async function downloadTikTok(
 
         if (type === "hd") {
 
+            // IMPORTANT:
+            // HD comes directly from
+            // TikWM's hdplay field.
+
             videoUrl =
                 data.hdplay;
 
@@ -934,7 +924,7 @@ async function downloadTikTok(
 
                 if (
                     percent !==
-                    lastProgress &&
+                        lastProgress &&
                     (
                         percent % 10 === 0 ||
                         percent === 100
@@ -1001,6 +991,10 @@ ${progressBar(
 
         } else {
 
+            // ─────────────────
+            // VIDEO / HD
+            // ─────────────────
+
             await updateProgress(
                 ctx,
                 status.message_id,
@@ -1026,6 +1020,7 @@ ${progressBar(
             );
         }
 
+        // Delete status message
         try {
 
             await ctx.telegram.deleteMessage(
@@ -1034,8 +1029,9 @@ ${progressBar(
             );
 
         } catch {}
+    }
 
-    } catch (error) {
+    catch (error) {
 
         console.error(
             "Download error:",
@@ -1051,8 +1047,11 @@ ${progressBar(
 ${error.message}`
         );
 
-    } finally {
+    }
 
+    finally {
+
+        // Always delete files
         cleanup([
             inputFile,
             outputFile
@@ -1071,6 +1070,7 @@ bot.on(
         const text =
             ctx.message.text.trim();
 
+        // Ignore commands
         if (
             text.startsWith("/")
         ) {
